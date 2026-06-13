@@ -1,0 +1,12 @@
+name: alogi2
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - pip
+  - pip:
+    - pymupdf==1.27.2.3
+    - pypdf==6.13.2
+    - typing-extensions==4.15.0

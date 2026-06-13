@@ -1,0 +1,10 @@
+{
+  "update_time": 43200,
+  "total_waves": 11,
+  "current_wave": 6,
+  "mission_names": [
+    "ap004",
+    "ap012",
+    "ap024"
+  ]
+}

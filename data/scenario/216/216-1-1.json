@@ -1,0 +1,25 @@
+{
+  "update_time": 28800,
+  "total_waves": 2,
+  "current_wave": 1,
+  "mission_names": [
+    "aa001",
+    "aa003",
+    "ap001",
+    "ap003",
+    "ap009",
+    "ap010",
+    "ap021",
+    "ap023",
+    "ap026",
+    "ap027",
+    "ap029",
+    "ap030",
+    "ap031",
+    "ap033",
+    "ap036",
+    "ap040",
+    "ap044",
+    "ap049"
+  ]
+}

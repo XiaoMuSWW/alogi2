@@ -6,7 +6,13 @@ import os, csv
 
 
 def write_csv(entries: list, path: str) -> None:
-    """将调度结果写入 CSV 文件"""
+    """将调度结果写入 CSV 文件
+
+    Args:
+        entries: 调度条目列表，每项含 satellite_name / mission_name / station_name /
+                 start_time / end_time / roll_angle
+        path: 输出 CSV 文件路径
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=[

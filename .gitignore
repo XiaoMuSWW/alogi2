@@ -26,3 +26,9 @@ _archive/
 
 # Duplicate test artifacts (real data is in data/scenario/)
 /scenario/
+
+*.docx
+
+/docs/
+
+*.7z

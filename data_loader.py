@@ -9,7 +9,14 @@ from config import DATA_PATH
 
 
 def parse_intervals(s: str) -> list:
-    """解析JSON格式时间区间 [[a,b], ...]"""
+    """解析JSON格式时间区间字符串为列表
+
+    Args:
+        s: JSON 格式字符串，如 "[[0, 26889], [37691, 86399]]"
+
+    Returns:
+        区间列表 [(a, b), ...]，解析失败返回空列表
+    """
     if not s or not s.strip():
         return []
     try:
@@ -19,7 +26,14 @@ def parse_intervals(s: str) -> list:
 
 
 def load_satellites(path: str = None) -> dict:
-    """加载卫星参数"""
+    """加载卫星参数 CSV
+
+    Args:
+        path: CSV 文件路径，默认 data/satellite.csv
+
+    Returns:
+        卫星参数字典 {name: {type, left_roll, right_roll, startup_min, ...}}
+    """
     if path is None:
         path = os.path.join(DATA_PATH, 'satellite.csv')
     sats = {}
@@ -51,7 +65,14 @@ def load_satellites(path: str = None) -> dict:
 
 
 def load_missions(path: str = None) -> dict:
-    """加载任务参数"""
+    """加载任务参数 CSV
+
+    Args:
+        path: CSV 文件路径，默认 data/mission.csv
+
+    Returns:
+        任务参数字典 {name: {type, score, validity, frequency, ...}}
+    """
     if path is None:
         path = os.path.join(DATA_PATH, 'mission.csv')
     miss = {}
@@ -74,7 +95,16 @@ def load_missions(path: str = None) -> dict:
 
 
 def load_access(path: str = None) -> tuple:
-    """加载access.csv，分离观测窗口和通信窗口"""
+    """加载 access.csv，分离观测窗口和通信窗口
+
+    Args:
+        path: CSV 文件路径，默认 data/access.csv
+
+    Returns:
+        (obs_acc, stn_acc)
+        obs_acc: {sat: {mission: [(time, roll), ...]}}
+        stn_acc: {sat: {station: [(start, end), ...]}}
+    """
     if path is None:
         path = os.path.join(DATA_PATH, 'access.csv')
     obs_acc = defaultdict(lambda: defaultdict(list))   # sat -> mission -> [(time, roll), ...]
@@ -97,7 +127,15 @@ def load_access(path: str = None) -> tuple:
 
 
 def load_all():
-    """一次性加载全部数据"""
+    """一次性加载全部数据
+
+    Returns:
+        (sats, miss, obs_acc, stn_acc)
+        sats: 卫星参数字典
+        miss: 任务参数字典
+        obs_acc: 观测 access 数据
+        stn_acc: 地面站 access 数据
+    """
     print("Loading data...")
     sats = load_satellites()
     miss = load_missions()
@@ -107,7 +145,15 @@ def load_all():
 
 
 def _parse_optional_float(row: dict, key: str) -> float | None:
-    """解析可选浮点字段，空值返回 None"""
+    """解析可选浮点字段，空值返回 None
+
+    Args:
+        row: CSV 行字典
+        key: 字段名
+
+    Returns:
+        浮点值或 None
+    """
     v = row.get(key, '').strip()
     if not v:
         return None

@@ -28,6 +28,7 @@ _archive/
 /scenario/
 
 *.docx
+
 *.doc
 
 *.7z

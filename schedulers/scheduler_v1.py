@@ -16,7 +16,7 @@ def schedule_missions(sat_names: list, mission_names: set,
                       stn_acc: dict, base_mode: bool = True,
                       sat_tl: dict = None, orbit_sum: dict = None,
                       stn_booked: dict = None, sched: dict = None) -> tuple:
-    """任务优先贪心调度（失败重试）
+    """任务优先贪心调度
 
     base_mode=True:  初始方案，仅 OBS→DL（成像同时数传）
     base_mode=False: 动态波次方案，UL→OBS→DL（数传在成像后完成）
@@ -81,7 +81,7 @@ def schedule_missions(sat_names: list, mission_names: set,
     # 按单位时间收益(OBS+DL)降序、时间升序
     all_cands.sort(key=lambda c: (-c['score_ratio'], c['os']))
 
-    # 建立任务→候选索引
+    # 索引
     miss_idx = defaultdict(list)
     for idx, c in enumerate(all_cands):
         miss_idx[c['mn']].append(idx)
@@ -185,7 +185,8 @@ def _commit_schedule(entry: dict, mn: str, miss: dict, sat_tl: dict,
     sat_end = dl_e
     stn_end = dl_e
 
-    sat_tl[sn].append((ul_s, sat_end, entry['roll'], mn))
+    start_with_ul = not base_mode
+    sat_tl[sn].append((ul_s, sat_end, entry['roll'], mn, start_with_ul))
     sat_tl[sn].sort(key=lambda x: x[0])
     # 轨道累计只计算成像时间
     orbit_sum[sn][p_idx] = orbit_sum[sn].get(p_idx, 0) + dur
@@ -282,10 +283,11 @@ def _try_schedule(c: dict, sats: dict, miss: dict,
     if not check_comm_ratio(mi, dur, dl_dur):
         return False, {}, False
 
-    # 卫星时间线插入检查（含点区域任务切换时间）
+    # 卫星时间线插入检查（含点↔区域任务切换 & 测控/数传同型跳过）
     st_list = sat_tl.get(sn, [])
+    start_with_ul = not base_mode
     if check_sat_insertion(sa, st_list, ul_s, sat_occ_end, c['roll'],
-                           mi['type'], miss):
+                           mi['type'], miss, start_with_ul=start_with_ul):
         return False, {}, False
 
     # 地面站可用性检查

@@ -29,10 +29,10 @@ def check_roll_strict(sat: dict, roll: float) -> bool:
 
 
 def clamp_roll_area(sat: dict, roll: float) -> float:
-    """区域任务侧摆角夹持（a / aa）
+    """侧摆角夹持（适用于所有任务类型 p/ap/a/aa）
 
     将超出卫星范围的 roll 夹持到最近有效边界，避开禁飞区。
-    ap 是追加点任务，不适用夹持，走 check_roll_strict 严格检查。
+    若原始侧摆角已在有效范围内且不在禁飞区，直接返回原值。
 
     Args:
         sat: 卫星参数字典，含 left_roll / right_roll / lf / rf
@@ -95,22 +95,46 @@ def obs_duration(sat: dict, mission: dict) -> int:
 # ============================================================
 # Status 4: 窗口重叠检查
 # ============================================================
-def sat_timeline_gap(sat: dict, last_roll: float | None, new_roll: float) -> int:
+def _comm_type(sat: dict, base_mode: bool, is_end: bool) -> str:
+    """推断卫星时间线上任务边界的通信类型
+
+    任务始终以 DL（数传）结束；起始类型取决于模式：
+    - base_mode: OBS ∥ DL，起始包含 DL
+    - wave_mode: UL → OBS ∥ DL，起始为 UL（测控）
+
+    Args:
+        sat: 卫星参数字典（保留以便扩展）
+        base_mode: True=基线模式, False=波次模式
+        is_end: True=任务末尾类型, False=任务起始类型
+
+    Returns:
+        'DL' | 'UL' | 'OBS'
+    """
+    if is_end:
+        return 'DL'  # 所有任务末尾均为数传
+    return 'DL' if base_mode else 'UL'
+
+
+def sat_timeline_gap(sat: dict, last_roll: float | None, new_roll: float,
+                     same_comm_type: bool = False) -> int:
     """同一卫星两次任务之间的最小间隔
 
     gap = 姿态转换时间 + SAR反转时间 + 测控/数传转换时间
+
+    当两次任务边界通信类型相同时（如 DL→DL），省略测控/数传转换时间。
 
     Args:
         sat: 卫星参数字典，含 type / reversal_time / trantime_cc / trantime_sar / lf / rf
         last_roll: 前一次观测的侧摆角，None 表示无前驱
         new_roll: 新观测的侧摆角（度）
+        same_comm_type: 前后边界通信类型是否相同，True 时跳过 trantime_cc
 
     Returns:
         最小间隔时间（秒）
     """
     tt = trans_time(sat, last_roll, new_roll)
     rev = sat['reversal_time'] if need_reversal(sat, last_roll, new_roll) else 0
-    cc = int(sat.get('trantime_cc', 0) or 0)
+    cc = 0 if same_comm_type else int(sat.get('trantime_cc', 0) or 0)
     return int(tt + rev + cc)
 
 
@@ -228,20 +252,22 @@ def _is_type_switch(t1: str, t2: str) -> bool:
 
 def check_sat_insertion(sat: dict, timeline: list, ul_start: int, sat_end: int,
                         new_roll: float, new_type: str = None,
-                        miss: dict = None) -> bool:
+                        miss: dict = None, start_with_ul: bool = False) -> bool:
     """检查新窗口是否能插入卫星时间线
 
     对前驱和后继分别计算 transition gap（含 SAR 反转 + 测控/数传转换）。
     点↔区域任务切换时，至少需满足 trantime_sar 任务切换时间。
+    前后边界通信类型相同时，省略 trantime_cc。
 
     Args:
         sat: 卫星参数字典，含 type / lf / rf / reversal_time / trantime_cc / trantime_sar
-        timeline: 已占用时间线，[(ul_start, sat_end, roll, mission_name), ...] 按时间升序
+        timeline: 已占用时间线，[(ul_start, sat_end, roll, mission_name, start_with_ul?), ...] 按时间升序
         ul_start: 新窗口的卫星占用起始时间（秒）
         sat_end: 新窗口的卫星占用结束时间（秒）
         new_roll: 新窗口的侧摆角（度）
         new_type: 新任务类型 (p/ap/a/aa)，用于点↔区域切换检查
         miss: 任务字典 {name: {type, ...}}，用于查前后任务类型
+        start_with_ul: 新任务是否以 UL 起始（False=基线方案以DL起始, True=波次方案以UL起始）
 
     Returns:
         True = 冲突，不可插入；False = 可插入
@@ -250,6 +276,8 @@ def check_sat_insertion(sat: dict, timeline: list, ul_start: int, sat_end: int,
         return False
 
     trantime_sar = int(sat.get('trantime_sar', 20))
+    # 新任务的通信起始类型
+    new_start_comm = 'DL' if not start_with_ul else 'UL'
 
     lo, hi = 0, len(timeline)
     while lo < hi:
@@ -264,7 +292,11 @@ def check_sat_insertion(sat: dict, timeline: list, ul_start: int, sat_end: int,
         pred = timeline[ins_pos - 1]
         pred_end = pred[1]
         pred_roll = pred[2]
-        gap = sat_timeline_gap(sat, pred_roll, new_roll)
+        # 前驱末尾永远是 DL，新任务起始由 start_with_ul 决定
+        pred_start_with_ul = pred[4] if len(pred) > 4 else True  # 向后兼容
+        pred_end_comm = 'DL'
+        same_comm = (pred_end_comm == new_start_comm)
+        gap = sat_timeline_gap(sat, pred_roll, new_roll, same_comm_type=same_comm)
         # 点↔区域切换: 至少需要 trantime_sar 任务切换时间
         if new_type and miss:
             pred_mn = pred[3] if len(pred) > 3 else None
@@ -279,7 +311,11 @@ def check_sat_insertion(sat: dict, timeline: list, ul_start: int, sat_end: int,
         succ = timeline[ins_pos]
         succ_start = succ[0]
         succ_roll = succ[2]
-        gap = sat_timeline_gap(sat, new_roll, succ_roll)
+        # 后继起始类型从时间线读取，新任务末尾永远是 DL
+        succ_start_with_ul = succ[4] if len(succ) > 4 else True  # 向后兼容
+        succ_start_comm = 'DL' if not succ_start_with_ul else 'UL'
+        same_comm = ('DL' == succ_start_comm)  # 新末尾 DL == 后继起始？
+        gap = sat_timeline_gap(sat, new_roll, succ_roll, same_comm_type=same_comm)
         # 点↔区域切换: 至少需要 trantime_sar 任务切换时间
         if new_type and miss:
             succ_mn = succ[3] if len(succ) > 3 else None

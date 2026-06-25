@@ -1,7 +1,7 @@
 from collections import defaultdict
-from config import ORBIT_PERIOD, CLAMP_TOLERANCE
+from config import ORBIT_PERIOD, CLAMP_TOLERANCE_P, CLAMP_TOLERANCE_A
 from constraints import (
-    check_roll_strict, clamp_roll_area, obs_duration,
+    clamp_roll_area, obs_duration,
     check_mission_window, check_sunlight
 )
 
@@ -26,23 +26,18 @@ def expand_windows(obs_acc: dict, sats: dict, miss: dict, offset: int = 0) -> di
             mi = miss.get(mn)
             if not mi:
                 continue
-            is_area = mi['type'] in ('a', 'aa')  # ap=追加点，是点目标非区域
             dur = obs_duration(sa, mi)
             half = dur // 2
             for t, roll in wlist:
                 if t < offset:
                     continue
-                # 侧摆角处理
-                if not is_area:
-                    if not check_roll_strict(sa, roll):
-                        continue
-                    use_roll = roll
-                else:
-                    clamped = clamp_roll_area(sa, roll)
-                    # P1-2: 夹持偏移超过3°则丢弃（目标不在覆盖范围内）
-                    if abs(clamped - roll) > CLAMP_TOLERANCE:
-                        continue
-                    use_roll = clamped
+                # 侧摆角处理：按任务类型使用不同容差
+                clamped = clamp_roll_area(sa, roll)
+                # 点目标 0.1° / 区域目标 1° 夹持容差
+                tol = CLAMP_TOLERANCE_P if mi['type'] in ('p', 'ap') else CLAMP_TOLERANCE_A
+                if abs(clamped - roll) > tol:
+                    continue
+                use_roll = clamped
                 # 时间窗口构建
                 os_ = max(t - half, offset)
                 oe = os_ + dur - 1
@@ -57,6 +52,22 @@ def expand_windows(obs_acc: dict, sats: dict, miss: dict, offset: int = 0) -> di
                 if not check_sunlight(sa, mi, os_):
                     continue
                 expanded[sn][mn].append((os_, oe, use_roll))
+
+    #后过滤：剔除候选窗口不足以完成任务的 mission
+    all_missions = set()
+    for sn in expanded:
+        all_missions.update(expanded[sn].keys())
+    for mn in all_missions:
+        mi = miss.get(mn)
+        if not mi:
+            continue
+        freq = mi['frequency'] if mi['frequency'] > 0 else 1
+        total = sum(len(expanded.get(s, {}).get(mn, [])) for s in expanded)
+        if total < freq:
+            for s in list(expanded.keys()):
+                if mn in expanded[s]:
+                    del expanded[s][mn]
+
     return expanded
 
 def filter_state_before(state: dict, boundary: int) -> dict:

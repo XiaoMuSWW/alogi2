@@ -11,7 +11,7 @@ import os, json, time, argparse, subprocess, csv
 from typing import List, Dict
 from config import DATA_PATH, SCENARIO_PATH, RESULT_PATH, EVAL_EXE
 from data_loader import load_all
-from schedulers.scheduler_v2 import (schedule_missions)
+from schedulers.scheduler_v1 import (schedule_missions)
 from output_writer import write_csv
 
 from pre_processer import (
